@@ -56,7 +56,9 @@ export async function persist(db?: Database): Promise<void> {
 
 async function init(): Promise<Database> {
   const initSqlJs = (await import("sql.js")).default;
-  const SQL = await initSqlJs({ locateFile: () => "/sql-wasm.wasm" });
+  // Held in a variable: some @types/sql.js versions mark useOldExtensionFunctions as required.
+  const cfg = { locateFile: () => "/sql-wasm.wasm", useOldExtensionFunctions: false };
+  const SQL = await initSqlJs(cfg);
   const saved = await idbGet();
   const db = saved ? new SQL.Database(saved) : new SQL.Database();
   db.run(SCHEMA);
