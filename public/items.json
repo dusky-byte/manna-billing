@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "items": [
+    { "code": "PF-46", "name": "Photo Frame 4x6 in", "hsn": "", "unit": "pcs", "rate": 100 },
+    { "code": "PF-57", "name": "Photo Frame 5x7 in", "hsn": "", "unit": "pcs", "rate": 150 },
+    { "code": "PF-68", "name": "Photo Frame 6x8 in", "hsn": "", "unit": "pcs", "rate": 200 },
+    { "code": "PF-810", "name": "Photo Frame 8x10 in", "hsn": "", "unit": "pcs", "rate": 300 },
+    { "code": "PF-A4", "name": "Certificate Frame A4", "hsn": "", "unit": "pcs", "rate": 350 }
+  ]
+}
