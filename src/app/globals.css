@@ -38,6 +38,15 @@ button.b:active{box-shadow:none;transform:translate(1px,1px)}
 button.b:focus-visible{outline:2px solid var(--focus)}
 button.b:disabled{opacity:.4;cursor:default}
 kbd{font:700 11px Consolas,monospace;background:var(--title);color:var(--titleink);padding:1px 5px;margin-right:5px}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+.party-card{overflow:hidden;border:1px solid var(--line);border-radius:10px;background:var(--panel);min-width:0}
+.party-info{display:grid;gap:6px;padding:10px}
+.party-info span{color:var(--mute)}
+.party-info button{justify-self:start}
+.party-settings{display:grid;gap:12px;margin:10px;padding:14px;max-width:620px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.party-settings label{display:grid;gap:5px;font-weight:700}
+.party-settings input,.party-settings textarea,.party-settings select{width:100%;font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px;background:var(--field);color:var(--ink)}
+.party-settings textarea{resize:vertical}
 .form{background:#fff;color:#111;border:2px solid #111;border-radius:12px;overflow:hidden;margin:0 10px 10px;font-size:14px}
 .fh{background:#111;color:#fff;text-align:center;font:700 19px Rajdhani,"Arial Narrow",Tahoma,sans-serif;letter-spacing:.3em;padding:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .fb{text-align:center;padding:10px;border-bottom:2px solid #111}
@@ -53,5 +62,5 @@ kbd{font:700 11px Consolas,monospace;background:var(--title);color:var(--titlein
 .decl{padding:8px 12px;font-size:12px;border-top:1px solid #111}
 .sig{display:flex;justify-content:space-between;padding:36px 12px 10px}
 .note{font-size:12px;color:var(--mute);padding:0 10px 10px}
-@media (max-width:760px){.cols{grid-template-columns:1fr}.lcdwrap{min-width:0;flex:1}.lcd{font-size:36px}.g td input{width:58px}}
+@media (max-width:760px){.cols,.parties{grid-template-columns:1fr}.lcdwrap{min-width:0;flex:1}.lcd{font-size:36px}.g td input{width:58px}}
 @media print{.noprint{display:none!important}body{background:#fff}.win{border:none;border-radius:0;box-shadow:none;margin:0;max-width:none;background:#fff}.form{margin:0;border-radius:0}}

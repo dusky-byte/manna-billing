@@ -1,0 +1,4 @@
+node_modules
+.next
+public/sql-wasm.wasm
+next-env.d.ts

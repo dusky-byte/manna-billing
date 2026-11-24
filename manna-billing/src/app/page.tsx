@@ -1,0 +1,256 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { findBuyer, getSeller, nextInvoiceNo, saveInvoice, saveSeller, searchBuyers, searchItems } from "@/lib/repo";
+import { inr, today } from "@/lib/format";
+import { GSTIN_RE, normGstin, stateOf } from "@/lib/gst";
+import { DEFAULT_HSN, DEFAULT_SELLER, DEFAULT_UNIT } from "@/lib/config";
+import type { Buyer, Item, Line, Seller } from "@/lib/types";
+
+const MINROWS = 8;
+const NO_BUYER: Buyer = { name: "", address: "", gstin: "", state: "", code: "" };
+
+export default function NewBill() {
+  const router = useRouter();
+  const qRef = useRef<HTMLInputElement>(null);
+  const [no, setNo] = useState<number | null>(null);
+  const [date, setDate] = useState(today());
+  const [seller, setSeller] = useState<Seller>(DEFAULT_SELLER);
+  const [sellerDraft, setSellerDraft] = useState<Seller | null>(null);
+  const [sellerErr, setSellerErr] = useState("");
+  const [buyer, setBuyer] = useState<Buyer>(NO_BUYER);
+  const [buyerOpts, setBuyerOpts] = useState<Buyer[]>([]);
+  const [q, setQ] = useState("");
+  const [picks, setPicks] = useState<Item[]>([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [errs, setErrs] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    nextInvoiceNo().then(setNo).catch((e) => setErrs([String(e)]));
+    getSeller().then(setSeller).catch(() => {});
+    searchBuyers("").then(setBuyerOpts).catch(() => {});
+  }, []);
+  useEffect(() => {
+    let live = true;
+    searchItems(q).then((r) => live && setPicks(r)).catch(() => {});
+    return () => { live = false; };
+  }, [q]);
+
+  // ---- seller
+  const saveSellerNow = async () => {
+    if (!sellerDraft) return;
+    const g = normGstin(sellerDraft.gstin);
+    if (!sellerDraft.name.trim()) return setSellerErr("Seller name is required.");
+    if (!GSTIN_RE.test(g)) return setSellerErr("Seller GSTIN is invalid (15 characters).");
+    const next: Seller = { ...sellerDraft, name: sellerDraft.name.trim(), gstin: g, ...stateOf(g) };
+    await saveSeller(next);
+    setSeller(next); setSellerDraft(null); setSellerErr("");
+  };
+
+  // ---- buyer autofill (fills only empty fields; stored buyers are never altered)
+  const fillFrom = (hit: Buyer) =>
+    setBuyer((b) => ({
+      name: b.name || hit.name,
+      address: b.address || hit.address,
+      gstin: b.gstin || hit.gstin,
+      ...stateOf(b.gstin || hit.gstin),
+    }));
+  const onBuyerName = (v: string) => {
+    setBuyer((b) => ({ ...b, name: v }));
+    searchBuyers(v).then(setBuyerOpts).catch(() => {});
+  };
+  const onBuyerBlur = () => {
+    const hit = buyerOpts.find((o) => o.name.toLowerCase() === buyer.name.trim().toLowerCase());
+    if (hit && !buyer.gstin) fillFrom(hit);
+  };
+  const onGstin = async (raw: string) => {
+    const g = normGstin(raw).slice(0, 15);
+    setBuyer((b) => ({ ...b, gstin: g, ...stateOf(g) }));
+    if (g.length === 15) {
+      const hit = await findBuyer(g);
+      if (hit) setBuyer((b) => ({ ...b, name: b.name || hit.name, address: b.address || hit.address }));
+    }
+  };
+
+  // ---- items
+  const add = (i: Item) =>
+    setLines((ls) => {
+      const at = ls.findIndex((l) => l.itemId === i.id);
+      if (at >= 0) return ls.map((l, k) => (k === at ? { ...l, qty: l.qty + 1 } : l));
+      return [...ls, { itemId: i.id, code: i.code, name: i.name, hsn: i.hsn || DEFAULT_HSN, unit: i.unit || DEFAULT_UNIT, qty: 1, rate: i.rate }];
+    });
+  const addCustom = (name: string) =>
+    setLines((ls) => [...ls, { itemId: null, code: "", name, hsn: DEFAULT_HSN, unit: DEFAULT_UNIT, qty: 1, rate: 0 }]);
+  const patch = (k: number, p: Partial<Line>) => setLines((ls) => ls.map((l, i) => (i === k ? { ...l, ...p } : l)));
+
+  const total = Math.round(lines.reduce((s, l) => s + l.qty * l.rate, 0) * 100) / 100;
+  const qtyTotal = lines.reduce((s, l) => s + (l.qty || 0), 0);
+
+  const validate = (): string[] => {
+    const e: string[] = [];
+    if (!date) e.push("Date is required.");
+    if (!seller.name.trim()) e.push("Seller name is required.");
+    if (!GSTIN_RE.test(normGstin(seller.gstin))) e.push("Seller GSTIN is missing or invalid. Use Edit seller.");
+    if (!buyer.name.trim()) e.push("Buyer name is required.");
+    if (!buyer.gstin) e.push("Buyer GSTIN is required.");
+    else if (!GSTIN_RE.test(buyer.gstin)) e.push("Buyer GSTIN is invalid (15 characters, e.g. 33AAFCT3292B1ZN).");
+    const used = lines.filter((l) => l.qty > 0);
+    if (!used.length) e.push("Add at least one item with a quantity.");
+    if (used.some((l) => !(l.rate > 0))) e.push("Every item needs a rate.");
+    return e;
+  };
+
+  const clear = () => { setLines([]); setBuyer(NO_BUYER); setDate(today()); setQ(""); setErrs([]); };
+  const save = async () => {
+    if (busy) return;
+    const e = validate();
+    setErrs(e);
+    if (e.length) return;
+    setBusy(true);
+    try {
+      const st = stateOf(buyer.gstin);
+      const n = await saveInvoice({ date, seller, buyer: { ...buyer, name: buyer.name.trim(), address: buyer.address.trim(), ...st }, lines });
+      router.push(`/invoice?no=${n}&dl=1`);
+    } catch (x) {
+      setErrs([String(x)]); setBusy(false);
+    }
+  };
+
+  const onSearchKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    const v = q.trim();
+    if (!v) return;
+    const hit = picks.find((i) => i.code.toLowerCase() === v.toLowerCase()) ?? picks[0];
+    if (hit) add(hit); else addCustom(v);
+    setQ("");
+  };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); save(); }
+      else if (e.key === "F3") { e.preventDefault(); qRef.current?.focus(); }
+      else if (e.key === "F4") { e.preventDefault(); clear(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  });
+
+  const filler = Math.max(0, MINROWS - lines.length);
+  const hasQ = q.trim().length > 0;
+  const sd = sellerDraft;
+  const setSd = (p: Partial<Seller>) => setSellerDraft((d) => (d ? { ...d, ...p } : d));
+
+  return (
+    <>
+      <div className="strip">
+        <label>Invoice No <output className="box">{no ?? "…"}</output></label>
+        <label>Date <span className="req">*</span> <input type="date" value={date} className={date ? "" : "bad"} onChange={(e) => setDate(e.target.value)} /></label>
+      </div>
+
+      <div className="parties">
+        <section className="panel">
+          <div className="ph">Seller</div>
+          {!sd ? (
+            <div className="sum">
+              <strong>{seller.name}</strong>
+              <span className="hint">GSTIN {seller.gstin} · {seller.state}, {seller.code}</span>
+              <button className="b" onClick={() => setSellerDraft(seller)}>Edit seller</button>
+            </div>
+          ) : (
+            <div className="pbody">
+              <label>Enterprise name<input value={sd.name} onChange={(e) => setSd({ name: e.target.value })} /></label>
+              <label>GSTIN / UIN<input maxLength={15} value={sd.gstin} onChange={(e) => setSd({ gstin: normGstin(e.target.value) })} /></label>
+              <label>Address<textarea rows={3} value={sd.address} onChange={(e) => setSd({ address: e.target.value })} /></label>
+              <label>E-mail<input value={sd.email} onChange={(e) => setSd({ email: e.target.value })} /></label>
+              {sellerErr && <span className="req">{sellerErr}</span>}
+              <div className="acts">
+                <button className="b" onClick={saveSellerNow}>Save seller</button>
+                <button className="b" onClick={() => { setSellerDraft(null); setSellerErr(""); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="ph">Buyer (Bill to) <span className="req">*</span></div>
+          <div className="pbody">
+            <label>Enterprise name
+              <input list="buyers" value={buyer.name} className={errs.length && !buyer.name.trim() ? "bad" : ""}
+                onChange={(e) => onBuyerName(e.target.value)} onBlur={onBuyerBlur} autoComplete="off" />
+            </label>
+            <label>GSTIN / UIN
+              <input list="gstins" maxLength={15} value={buyer.gstin} autoComplete="off"
+                className={errs.length && !GSTIN_RE.test(buyer.gstin) ? "bad" : ""} onChange={(e) => onGstin(e.target.value)} />
+              <span className="hint">{buyer.state ? `${buyer.state}, Code : ${buyer.code}` : "State is filled from the GSTIN"}</span>
+            </label>
+            <label>Address<textarea rows={3} value={buyer.address} onChange={(e) => setBuyer((b) => ({ ...b, address: e.target.value }))} /></label>
+          </div>
+          <datalist id="buyers">{buyerOpts.map((o) => <option key={o.gstin} value={o.name} />)}</datalist>
+          <datalist id="gstins">{buyerOpts.map((o) => <option key={o.gstin} value={o.gstin} label={o.name} />)}</datalist>
+        </section>
+      </div>
+
+      <div className="cols">
+        <section className="panel items">
+          <div className="ph">Items</div>
+          <input ref={qRef} placeholder="Code or name, Enter to add" autoComplete="off" value={q}
+            onChange={(e) => setQ(e.target.value)} onKeyDown={onSearchKey} />
+          <div className="ilist">
+            <table className="g">
+              <thead><tr><th>Code</th><th>Item</th><th className="num">Rate</th></tr></thead>
+              <tbody>
+                {picks.map((i, n) => (
+                  <tr key={i.id} className={"pick" + (hasQ && n === 0 ? " sel" : "")} onClick={() => add(i)}>
+                    <td>{i.code || "—"}</td><td>{i.name}</td><td className="num">{inr(i.rate)}</td>
+                  </tr>
+                ))}
+                {hasQ && picks.length === 0 && (
+                  <tr className="pick sel" onClick={() => { addCustom(q.trim()); setQ(""); }}>
+                    <td colSpan={3}>+ Add “{q.trim()}” as a new item (Enter)</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="ph">Bill</div>
+          <div className="grid">
+            <table className="g">
+              <thead><tr><th>Sl</th><th>Description</th><th>HSN</th><th className="num">Qty</th><th className="num">Rate</th><th className="num">Amount</th><th /></tr></thead>
+              <tbody>
+                {lines.map((l, k) => (
+                  <tr key={k}>
+                    <td className="num">{k + 1}</td><td>{l.name}</td>
+                    <td><input style={{ width: 64, textAlign: "left" }} value={l.hsn} aria-label="HSN" onChange={(e) => patch(k, { hsn: e.target.value })} /></td>
+                    <td><input type="number" min={0} step="any" value={l.qty} aria-label="Quantity" onChange={(e) => patch(k, { qty: Number(e.target.value) })} /></td>
+                    <td><input type="number" min={0} step="any" value={l.rate} aria-label="Rate" onChange={(e) => patch(k, { rate: Number(e.target.value) })} /></td>
+                    <td className="num">{inr(l.qty * l.rate)}</td>
+                    <td><button className="x" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, i) => i !== k))}>×</button></td>
+                  </tr>
+                ))}
+                {Array.from({ length: filler }, (_, i) => (
+                  <tr key={`f${i}`}><td>&nbsp;</td><td /><td /><td /><td /><td /><td /></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div className="foot">
+        <div className="stats"><span>Items {lines.length}</span><span>Qty {qtyTotal}</span></div>
+        <div className="lcdwrap"><div className="lcdlabel">TOTAL</div><div className="lcd">{inr(total)}</div></div>
+      </div>
+      {errs.length > 0 && <ul className="errs">{errs.map((e) => <li key={e}>• {e}</li>)}</ul>}
+
+      <div className="fkeys noprint">
+        <button className="b" disabled={busy} onClick={save}><kbd>F2</kbd>Save &amp; PDF</button>
+        <button className="b" onClick={() => qRef.current?.focus()}><kbd>F3</kbd>Find item</button>
+        <button className="b" onClick={clear}><kbd>F4</kbd>Clear bill</button>
+      </div>
+    </>
+  );
+}

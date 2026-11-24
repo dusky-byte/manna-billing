@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "items": [
+    { "code": "B01", "name": "NKJV Bible H/B IBL", "hsn": "4901", "unit": "No", "rate": 249.90 },
+    { "code": "B02", "name": "NIV Family Dev Study Bible H/B", "hsn": "4901", "unit": "No", "rate": 321.38 },
+    { "code": "B03", "name": "NKJV Bible Velvet Zip", "hsn": "4901", "unit": "No", "rate": 357.00 },
+    { "code": "B04", "name": "NKjv B Ible Deluxe Zip", "hsn": "4901", "unit": "No", "rate": 374.85 },
+    { "code": "B05", "name": "New Testament - Tamil", "hsn": "4901", "unit": "No", "rate": 151.20 },
+    { "code": "B06", "name": "KJV Bible H/B DY BSI", "hsn": "4901", "unit": "No", "rate": 425.25 },
+    { "code": "B07", "name": "ESV Global Study Bible H/B", "hsn": "4901", "unit": "No", "rate": 378.00 },
+    { "code": "B08", "name": "Good New Bible Youth Interactive", "hsn": "4901", "unit": "No", "rate": 10.00 },
+    { "code": "B09", "name": "Message Bible", "hsn": "4901", "unit": "No", "rate": 330.75 },
+    { "code": "B10", "name": "ESV Bible H/B Dy Blue", "hsn": "4901", "unit": "No", "rate": 330.75 },
+    { "code": "B11", "name": "Goods News Bible DY H/B", "hsn": "4901", "unit": "No", "rate": 378.00 },
+    { "code": "B12", "name": "Good New Bible Compt H/B", "hsn": "4901", "unit": "No", "rate": 283.50 },
+    { "code": "B13", "name": "TAMIL BIBLE COLOUR INDEX ZIP DY", "hsn": "4901", "unit": "No", "rate": 434.70 },
+    { "code": "B14", "name": "Tamil Bible Crown Rexine Zip", "hsn": "4901", "unit": "No", "rate": 359.10 },
+    { "code": "B15", "name": "Tamil Blble Crown Colour Index Zip", "hsn": "4901", "unit": "No", "rate": 396.90 },
+    { "code": "B16", "name": "NIV Bile P/B BSI DY", "hsn": "4901", "unit": "No", "rate": 378.00 }
+  ]
+}

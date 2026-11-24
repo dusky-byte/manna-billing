@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getInvoice } from "@/lib/repo";
-import { BUSINESS, DECLARATION } from "@/lib/config";
-import { inr, rupeesInWords, showDate } from "@/lib/format";
+import { DECLARATION } from "@/lib/config";
+import { amountInWords, inr, pdfDate } from "@/lib/format";
 
 type Data = Awaited<ReturnType<typeof getInvoice>>;
 
@@ -43,13 +43,15 @@ export default function InvoicePage() {
       <div className="form">
         <div className="fh">BILL OF SUPPLY</div>
         <div className="fb">
-          <div className="bn">{BUSINESS.name}</div>
-          <div>{BUSINESS.address}</div>
-          {BUSINESS.gstin && <div>GSTIN: {BUSINESS.gstin}</div>}
-          {BUSINESS.phone && <div>Phone: {BUSINESS.phone}</div>}
+          <div className="bn">{inv.seller.name}</div>
+          <div>{inv.seller.address}</div>
+          {inv.seller.gstin && <div>GSTIN: {inv.seller.gstin}</div>}
+          {inv.seller.email && <div>E-mail: {inv.seller.email}</div>}
         </div>
-        <div className="fmeta"><div>Bill No. <b>{inv.no}</b></div><div>Date: <b>{showDate(inv.date)}</b></div></div>
-        <div className="fline">Name <span className="dot">{inv.customer}</span> Phone <span className="dot" style={{ maxWidth: 160 }}>{inv.phone}</span></div>
+        <div className="fmeta"><div>Bill No. <b>{inv.no}</b></div><div>Date: <b>{pdfDate(inv.date)}</b></div></div>
+        <div className="fline">Buyer <span className="dot">{inv.buyer.name}</span></div>
+        <div className="fline">Address <span className="dot">{inv.buyer.address}</span></div>
+        <div className="fline">GSTIN <span className="dot">{inv.buyer.gstin}</span> State <span className="dot">{inv.buyer.state}</span></div>
         <table className="ft">
           <thead>
             <tr><th style={{ width: 40 }}>Sl</th><th>Description</th><th style={{ width: 70 }}>HSN</th><th className="num" style={{ width: 90 }}>Qty</th><th className="num" style={{ width: 90 }}>Rate</th><th className="num" style={{ width: 110 }}>Amount</th></tr>
@@ -67,9 +69,9 @@ export default function InvoicePage() {
           </tbody>
           <tfoot><tr><td colSpan={5} className="num">TOTAL ₹</td><td className="num">{inr(inv.total)}</td></tr></tfoot>
         </table>
-        <div className="fline">Rupees <span className="dot">{rupeesInWords(inv.total)}</span></div>
+        <div className="fline">Rupees <span className="dot">{amountInWords(inv.total)}</span></div>
         <div className="decl">{DECLARATION}</div>
-        <div className="sig"><span>Customer’s signature</span><span>For {BUSINESS.name}<br />Authorised signatory</span></div>
+        <div className="sig"><span>Customer’s signature</span><span>For {inv.seller.name}<br />Authorised signatory</span></div>
       </div>
     </>
   );
