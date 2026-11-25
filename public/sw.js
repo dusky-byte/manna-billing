@@ -1,5 +1,6 @@
-const V = "manna-v1";
-const PRE = ["/", "/invoice", "/items.json", "/sql-wasm.wasm", "/manifest.webmanifest"];
+const V = "manna-v2";
+const PRE = ["/", "/invoice", "/buyer", "/seller", "/items.json", "/sql-wasm.wasm", "/manifest.webmanifest",
+  "/fonts/pdf-regular.ttf", "/fonts/pdf-bold.ttf"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(

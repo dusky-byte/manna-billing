@@ -1,20 +1,26 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BILLING_DRAFT_KEY, readBillingDraft, writeBillingDraft } from "@/lib/billing-draft";
+import { readBillingDraft, writeBillingDraft } from "@/lib/billing-draft";
 import { today } from "@/lib/format";
 import { GSTIN_RE, normGstin, stateOf } from "@/lib/gst";
 import { findBuyer, saveBuyer, searchBuyers } from "@/lib/repo";
 import type { Buyer } from "@/lib/types";
 
 const EMPTY_BUYER: Buyer = { name: "", address: "", gstin: "", state: "", code: "" };
+type AutoField = "name" | "gstin";
 
 export default function BuyerPage() {
   const router = useRouter();
   const [buyer, setBuyer] = useState<Buyer>(EMPTY_BUYER);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
+  const [suggestions, setSuggestions] = useState<Buyer[]>([]);
+  const [activeField, setActiveField] = useState<AutoField | null>(null);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const searchReqRef = useRef(0);
+  const gstinReqRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -23,8 +29,45 @@ export default function BuyerPage() {
     } catch (e) {
       setError(String(e));
     }
-    searchBuyers("").then(setBuyers).catch((e) => setError(String(e)));
+    searchBuyers("")
+      .then((list) => {
+        setBuyers(list);
+        setSuggestions(list);
+      })
+      .catch((e) => setError(String(e)));
   }, []);
+
+  const applyBuyer = (entry: Buyer) => {
+    const gstin = normGstin(entry.gstin);
+    setBuyer({ ...entry, gstin, ...stateOf(gstin) });
+    setActiveField(null);
+    setHighlightIdx(-1);
+  };
+
+  const fillEmptyFrom = (hit: Buyer) => {
+    setBuyer((current) => {
+      const gstin = current.gstin || normGstin(hit.gstin);
+      return {
+        name: current.name || hit.name,
+        address: current.address || hit.address,
+        gstin,
+        ...stateOf(gstin),
+      };
+    });
+  };
+
+  const refreshSuggestions = async (field: AutoField, query: string, openList = true) => {
+    const reqId = ++searchReqRef.current;
+    if (openList) setActiveField(field);
+    setHighlightIdx(-1);
+    try {
+      const hits = await searchBuyers(query);
+      if (searchReqRef.current !== reqId) return;
+      setSuggestions(hits);
+    } catch {
+      /* ignore lookup errors while typing */
+    }
+  };
 
   const selectBuyer = async (gstin: string) => {
     if (!gstin) {
@@ -33,10 +76,84 @@ export default function BuyerPage() {
     }
     try {
       const found = await findBuyer(gstin);
-      if (found) setBuyer(found);
+      if (found) applyBuyer(found);
     } catch (e) {
       setError(String(e));
     }
+  };
+
+  const onNameChange = (value: string) => {
+    setBuyer((current) => ({ ...current, name: value }));
+    void refreshSuggestions("name", value);
+  };
+
+  const onNameBlur = () => {
+    setActiveField((current) => (current === "name" ? null : current));
+    setHighlightIdx(-1);
+    const trimmed = buyer.name.trim().toLowerCase();
+    if (!trimmed || buyer.gstin) return;
+    const pool = suggestions.length ? suggestions : buyers;
+    const hit = pool.find((entry) => entry.name.trim().toLowerCase() === trimmed);
+    if (hit) fillEmptyFrom(hit);
+  };
+
+  const onGstinChange = async (raw: string) => {
+    const gstin = normGstin(raw).slice(0, 15);
+    setBuyer((current) => ({ ...current, gstin, ...stateOf(gstin) }));
+    void refreshSuggestions("gstin", gstin, gstin.length < 15);
+    if (gstin.length !== 15) return;
+
+    const reqId = ++gstinReqRef.current;
+    try {
+      const hit = await findBuyer(gstin);
+      if (gstinReqRef.current !== reqId || !hit) return;
+      fillEmptyFrom(hit);
+      setActiveField(null);
+      setHighlightIdx(-1);
+    } catch {
+      /* ignore lookup errors while typing */
+    }
+  };
+
+  const onAutoKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!activeField || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((idx) => (idx + 1) % suggestions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((idx) => (idx <= 0 ? suggestions.length - 1 : idx - 1));
+    } else if (e.key === "Enter" && highlightIdx >= 0) {
+      e.preventDefault();
+      const chosen = suggestions[highlightIdx];
+      if (chosen) applyBuyer(chosen);
+    } else if (e.key === "Escape") {
+      setActiveField(null);
+      setHighlightIdx(-1);
+    }
+  };
+
+  const renderSuggestions = (field: AutoField) => {
+    if (activeField !== field || suggestions.length === 0) return null;
+    return (
+      <ul className="ac-list" role="listbox" aria-label="Saved buyers">
+        {suggestions.map((entry, idx) => (
+          <li
+            key={entry.gstin}
+            role="option"
+            aria-selected={idx === highlightIdx}
+            className={"ac-opt" + (idx === highlightIdx ? " sel" : "")}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              applyBuyer(entry);
+            }}
+          >
+            <span>{entry.name}</span>
+            <small>{entry.gstin}</small>
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -73,8 +190,48 @@ export default function BuyerPage() {
             {buyers.map((entry) => <option key={entry.gstin} value={entry.gstin}>{entry.name} · {entry.gstin}</option>)}
           </select>
         </label>
-        <label>Enterprise name<input required value={buyer.name} onChange={(e) => setBuyer((current) => ({ ...current, name: e.target.value }))} /></label>
-        <label>GSTIN / UIN<input required maxLength={15} value={buyer.gstin} onChange={(e) => setBuyer((current) => ({ ...current, gstin: normGstin(e.target.value), ...stateOf(normGstin(e.target.value)) }))} /></label>
+        <div className="ac-field">
+          <label htmlFor="buyer-name">Enterprise name</label>
+          <div className="ac">
+            <input
+              id="buyer-name"
+              required
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={activeField === "name" && suggestions.length > 0}
+              aria-autocomplete="list"
+              value={buyer.name}
+              onFocus={() => { if (!buyer.gstin) void refreshSuggestions("name", buyer.name); }}
+              onChange={(e) => onNameChange(e.target.value)}
+              onKeyDown={onAutoKeyDown}
+              onBlur={onNameBlur}
+            />
+            {renderSuggestions("name")}
+          </div>
+        </div>
+        <div className="ac-field">
+          <label htmlFor="buyer-gstin">GSTIN / UIN</label>
+          <div className="ac">
+            <input
+              id="buyer-gstin"
+              required
+              maxLength={15}
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={activeField === "gstin" && suggestions.length > 0}
+              aria-autocomplete="list"
+              value={buyer.gstin}
+              onFocus={() => { if (!buyer.gstin) void refreshSuggestions("gstin", buyer.gstin); }}
+              onChange={(e) => void onGstinChange(e.target.value)}
+              onKeyDown={onAutoKeyDown}
+              onBlur={() => {
+                setActiveField((current) => (current === "gstin" ? null : current));
+                setHighlightIdx(-1);
+              }}
+            />
+            {renderSuggestions("gstin")}
+          </div>
+        </div>
         <div className="hint">{buyer.state ? `${buyer.state}, Code: ${buyer.code}` : "State is filled from the GSTIN"}</div>
         <label>Address<textarea rows={3} value={buyer.address} onChange={(e) => setBuyer((current) => ({ ...current, address: e.target.value }))} /></label>
         {error && <span className="req">{error}</span>}
